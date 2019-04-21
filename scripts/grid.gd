@@ -1,5 +1,8 @@
 extends Node2D
 
+# state machine
+enum {wait, move}
+var state
 # Grid variables
 export (int) var width
 export (int) var height
@@ -21,6 +24,13 @@ preload("res://scenes/yellow_piece.tscn")
 # current pieces in the scene
 var all_pieces = []
 
+# swap back variables
+var piece_1 = null
+var piece_2 = null
+var last_place = Vector2(0,0)
+var last_direction = Vector2(0,0)
+var move_checked = false
+
 # touch variables
 var first_touch = Vector2(0,0)
 var final_touch = Vector2(0,0)
@@ -28,9 +38,11 @@ var controlling = false
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
+	state = move
 	randomize()
 	all_pieces = make_2d_array()
 	spawn_pieces()
+	
 
 
 func make_2d_array():
@@ -55,9 +67,28 @@ func spawn_pieces():
 					piece = possible_pieces[rand].instance()
 				
 				add_child(piece)
-				piece.position = grid_to_pixel(i, j)
+				# this makes it so that they fall, it doesn't affect the first draw of the board
+				# since it happens at init, still we could make a varioable to keep track if it's the first time
+				# this func is run and turn it off
+				piece.position = grid_to_pixel(i, j-y_offset) 
+				piece.move(grid_to_pixel(i, j))
 				all_pieces[i][j] = piece
-			
+	after_spawn()
+
+func after_spawn():
+	"""
+	Will cycle through all of the pieces checking for newly created matches
+	"""		
+	for i in width:
+		for j in height:
+			if all_pieces[i][j] != null:
+				if match_at(i, j, all_pieces[i][j].color):
+					find_matches()
+					get_parent().get_node("destroy_timer").start()
+					return
+	state = move
+	move_checked = false
+	
 func match_at(column, row, color):
 	if	column > 1:
 		if all_pieces[column -1][row] != null && all_pieces[column -2][row] != null:
@@ -108,11 +139,27 @@ func swap_pieces(column:int, row:int, direction: Vector2):
 	var first_piece = all_pieces[column][row]
 	var other_piece = all_pieces[column + direction.x][row + direction.y]
 	if first_piece != null and other_piece != null:
+		store_last_pieces(first_piece, other_piece, Vector2(column, row) , direction)
+		state = wait
 		all_pieces[column][row] = other_piece
 		all_pieces[column + direction.x][row + direction.y] = first_piece
 		first_piece.move(grid_to_pixel(column + direction.x, row + direction.y))
 		other_piece.move(grid_to_pixel(column, row))
-		find_matches()
+		if !move_checked:
+			find_matches()
+
+func store_last_pieces(first_piece, other_piece, place, direction):
+	piece_1 = first_piece
+	piece_2 = other_piece
+	last_place = place
+	last_direction = direction
+	
+func swap_back():
+	# move the previously swaped pieces to their previosu position
+	if piece_1 != null and piece_2 !=null:
+		swap_pieces(last_place.x, last_place.y, last_direction)
+	state = move
+	move_checked = false
 	
 func touch_difference(grid_1: Vector2, grid_2: Vector2):
 	# we substract vectors
@@ -132,7 +179,8 @@ func touch_difference(grid_1: Vector2, grid_2: Vector2):
 	
 # Called every frame. 'delta' is the elapsed time since the previous frame.
 func _process(delta):
-	touch_input()
+	if state == move:
+		touch_input()
 	
 #	pass
 
@@ -162,13 +210,19 @@ func find_matches():
 	get_parent().get_node("destroy_timer").start()
 	
 func destroy_matched():
+	var was_matched = false
 	for i in width:
 		for j in height:
 			if all_pieces[i][j] != null:
 				if all_pieces[i][j].matched:
+					was_matched = true
 					all_pieces[i][j].queue_free()
 					all_pieces[i][j] = null
-	get_parent().get_node("collapse_timer").start()
+	move_checked = true
+	if was_matched:
+		get_parent().get_node("collapse_timer").start()
+	else:
+		swap_back()
 
 func _on_destroy_timer_timeout():
 	destroy_matched()
