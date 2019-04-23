@@ -19,7 +19,7 @@ func make_2d_array():
 	return array
 	
 func _on_grid_make_ice(board_position: Vector2):
-	print(board_position)
+	
 	if ice_pieces.size() == 0:
 		ice_pieces = make_2d_array()
 	var current = ice.instance()
