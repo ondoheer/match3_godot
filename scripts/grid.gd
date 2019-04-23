@@ -11,6 +11,14 @@ export (int) var y_start
 export (int) var offset
 export (int) var y_offset
 
+# obstacle stuff
+export (PoolVector2Array) var empty_spaces
+export (PoolVector2Array) var ice_spaces
+
+# obstacle signals
+signal damage_ice
+signal make_ice
+
 # piece array
 var possible_pieces = [
 preload("res://scenes/blue_piece.tscn"),
@@ -42,6 +50,13 @@ func _ready():
 	randomize()
 	all_pieces = make_2d_array()
 	spawn_pieces()
+	spawn_ice()
+
+func restricted_movement(place: Vector2):
+	for i in empty_spaces.size():
+		if empty_spaces[i] == place:
+			return true
+	return false
 	
 
 
@@ -56,23 +71,24 @@ func make_2d_array():
 func spawn_pieces():
 	for i in width:
 		for j in height:
-			if all_pieces[i][j] == null:
-				#choose a random number
-				var rand = floor(rand_range(0,possible_pieces.size()))
-				var piece = possible_pieces[rand].instance()
-				var loops = 0
-				while(match_at(i, j, piece.color) and loops < 100):
-					rand = floor(rand_range(0,possible_pieces.size()))
-					loops += 1
-					piece = possible_pieces[rand].instance()
-				
-				add_child(piece)
-				# this makes it so that they fall, it doesn't affect the first draw of the board
-				# since it happens at init, still we could make a varioable to keep track if it's the first time
-				# this func is run and turn it off
-				piece.position = grid_to_pixel(i, j-y_offset) 
-				piece.move(grid_to_pixel(i, j))
-				all_pieces[i][j] = piece
+			if not restricted_movement(Vector2(i,j)):
+				if all_pieces[i][j] == null:
+					#choose a random number
+					var rand = floor(rand_range(0,possible_pieces.size()))
+					var piece = possible_pieces[rand].instance()
+					var loops = 0
+					while(match_at(i, j, piece.color) and loops < 100):
+						rand = floor(rand_range(0,possible_pieces.size()))
+						loops += 1
+						piece = possible_pieces[rand].instance()
+					
+					add_child(piece)
+					# this makes it so that they fall, it doesn't affect the first draw of the board
+					# since it happens at init, still we could make a varioable to keep track if it's the first time
+					# this func is run and turn it off
+					piece.position = grid_to_pixel(i, j-y_offset) 
+					piece.move(grid_to_pixel(i, j))
+					all_pieces[i][j] = piece
 	after_spawn()
 
 func after_spawn():
@@ -88,7 +104,12 @@ func after_spawn():
 					return
 	state = move
 	move_checked = false
-	
+
+func spawn_ice():
+	for i in ice_spaces.size():
+		
+		emit_signal("make_ice", ice_spaces[i])
+		
 func match_at(column, row, color):
 	if	column > 1:
 		if all_pieces[column -1][row] != null && all_pieces[column -2][row] != null:
@@ -218,21 +239,22 @@ func destroy_matched():
 					was_matched = true
 					all_pieces[i][j].queue_free()
 					all_pieces[i][j] = null
+					emit_signal("damage_ice", Vector2(i,j))
+					
 	move_checked = true
 	if was_matched:
 		get_parent().get_node("collapse_timer").start()
 	else:
 		swap_back()
 
-func _on_destroy_timer_timeout():
-	destroy_matched()
+
 	
 
 
 func collapse_columns():
 	for i in width:
 		for j in height:
-			if all_pieces[i][j] == null:
+			if all_pieces[i][j] == null and !restricted_movement(Vector2(i,j)):
 				for k in range(j +1, height):
 					if all_pieces[i][k] != null:
 						all_pieces[i][k].move(grid_to_pixel(i, j))
@@ -241,6 +263,10 @@ func collapse_columns():
 						break
 	get_parent().get_node("refill_timer").start()
 						
+						
+func _on_destroy_timer_timeout():
+	destroy_matched()
+	
 func _on_collapse_timer_timeout():
 	collapse_columns()
 
