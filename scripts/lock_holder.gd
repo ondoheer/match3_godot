@@ -1,5 +1,7 @@
 extends Node2D
 
+signal remove_lock
+
 var lock_pieces = []
 var width = 8
 var height = 10
@@ -37,3 +39,4 @@ func _on_grid_damage_lock(board_position: Vector2):
 		if lock_pieces[board_position.x][board_position.y].health <= 0:
 			lock_pieces[board_position.x][board_position.y].queue_free()
 			lock_pieces[board_position.x][board_position.y] = null
+			emit_signal("remove_lock", board_position)
